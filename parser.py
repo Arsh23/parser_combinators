@@ -1,5 +1,4 @@
 from collections import namedtuple, Callable
-from operator import add, or_
 from functools import reduce
 
 
@@ -33,7 +32,7 @@ class Parser():
             return parser2(inp)
         return Parser(parse_func)
 
-    def map(self, modify_fn):
+    def apply(self, modify_fn):
         if isinstance(modify_fn, Callable):
             parse_fn = self.parse
 
@@ -59,30 +58,14 @@ class Char(Parser):
             )
 
 
-def choice(list_of_parsers):
-    return reduce(or_, list_of_parsers)
-
-
-def Any(list_of_chars):
-    return choice(Char(x) for x in list_of_chars)
-
-
 def sequence(list_of_parsers):
-    return reduce(add, list_of_parsers)
+    def flatten_result(res):
+        if res.success and isinstance(res.result[0], list):
+            return Result(True, res.result[0] + [res.result[1]], res.input)
+        return res
+    return reduce(lambda x, y: (x + y).apply(flatten_result), list_of_parsers)
 
 
-def flatten(r):
-    def flatten_list(l):
-        if isinstance(l, list):
-            return [x for inner in l for x in flatten_list(inner)]
-        else:
-            return [l]
-
-    if r.success:
-        return Result(True, flatten_list(r.result), r.input)
-    else:
-        return r
-
-
-def Seq(list_of_chars):
-    return sequence(Char(x) for x in list_of_chars).map(flatten)
+choice = lambda list_of_parsers: reduce(lambda x, y: x | y, list_of_parsers)
+Any = lambda list_of_chars: choice(Char(x) for x in list_of_chars)
+Seq = lambda list_of_chars: sequence(Char(x) for x in list_of_chars)
