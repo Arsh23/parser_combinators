@@ -12,6 +12,25 @@ class Parser():
     def __call__(self, inp):
         return self.parse(inp)
 
+    def __add__(self, parser2):
+        def parse_func(inp):
+            res1 = self(inp)
+            if not res1.success:
+                return res1
+            res2 = parser2(res1.input)
+            if not res2.success:
+                return res2
+            return Result(True, [res1.result, res2.result], res2.input)
+        return Parser(parse_func)
+
+    def __or__(self, parser2):
+        def parse_func(inp):
+            res1 = self(inp)
+            if res1.success:
+                return res1
+            return parser2(inp)
+        return Parser(parse_func)
+
 
 class Char(Parser):
 
