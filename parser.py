@@ -26,9 +26,9 @@ class Parser():
 
     def __or__(self, parser2):
         def parse_func(inp):
-            res1 = self(inp)
-            if res1.success:
-                return res1
+            res = self(inp)
+            if res.success:
+                return res
             return parser2(inp)
         return Parser(parse_func)
 
@@ -55,23 +55,16 @@ class Char(Parser):
         if not isinstance(inp, str) or inp == "":
             return Result(False, 'No string found to parse', '')
         if inp[0] == str(self.char):
-            return Result(True, self.char, inp[1:])
+            return Result(True, [self.char], inp[1:])
         else:
             error_msg = f'Expected "{self.char}" but got "{inp[0]}"'
-            return Result(False, error_msg, inp)
+            return Result(False, [error_msg], inp)
 
 
-def sequence(list_of_parsers):
-    def flatten_result(res):
-        if res.success and isinstance(res.result[0], list):
-            return Result(True, res.result[0] + [res.result[1]], res.input)
-        return res
-    return reduce(lambda x, y: (x + y).apply(flatten_result), list_of_parsers)
-
-
-choice = lambda list_of_parsers: reduce(lambda x, y: x | y, list_of_parsers)
-Any = lambda list_of_chars: choice(Char(x) for x in list_of_chars)
-Seq = lambda list_of_chars: sequence(Char(x) for x in list_of_chars)
+Choice = lambda list_of_parsers: reduce(lambda x, y: x | y, list_of_parsers)
+Any = lambda list_of_chars: Choice(Char(x) for x in list_of_chars)
+Sequence = lambda list_of_parsers: reduce(lambda x, y: x + y, list_of_parsers)
+Seq = lambda list_of_chars: Sequence(Char(x) for x in list_of_chars)
 
 
 def ZeroOrMore(parser):
@@ -79,14 +72,38 @@ def ZeroOrMore(parser):
         res = parser(inp)
         if not res.success:
             return Result(True, [], inp)
-        next_res = new_parser(res.input)
-        return Result(True, [res.result] + next_res.result, next_res.input)
+        res2 = new_parser(res.input)
+        return Result(True, [res.result, res2.result], res2.input)
     return Parser(new_parser)
 
 
-def OneOrMore(parser):
-    def flatten_result(res):
-        if res.success and isinstance(res.result[1], list):
-            return Result(True, [res.result[0]] + res.result[1], res.input)
-        return res
-    return (parser + ZeroOrMore(parser)).apply(flatten_result)
+OneOrMore = lambda parser: parser + ZeroOrMore(parser)
+
+
+class Ref(Parser):
+
+    linked_parsers = {}
+
+    def __init__(self, parser_name):
+        self.name = parser_name
+
+    @classmethod
+    def link(cls, name, parser):
+        cls.linked_parsers[name] = parser.parse
+        return cls
+
+    def parse(self, inp):
+        if self.name in self.linked_parsers:
+            return self.linked_parsers[self.name](inp)
+        if self.name in globals():
+            return globals()[self.name](inp)
+        return Result(False, [f'parser of name "{self.name}" not found'], inp)
+
+
+def Between(p1, p2, p3):
+    def get_middle_result(r):
+        if r.success:
+            # format: result=[[[p1], [p2]], [p3]]
+            return Result(True, r.result[0][1], r.input)
+        return r
+    return (p1 + p2 + p3).apply(get_middle_result)
