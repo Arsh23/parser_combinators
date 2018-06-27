@@ -21,7 +21,18 @@ class Parser():
             res2 = parser2(res1.input)
             if not res2.success:
                 return res2
-            return Result(True, [res1.result, res2.result], res2.input)
+            return Result(True, [res1.result] + res2.result, res2.input)
+        return Parser(parse_func)
+
+    def __and__(self, parser2):
+        def parse_func(inp):
+            res1 = self(inp)
+            if not res1.success:
+                return res1
+            res2 = parser2(res1.input)
+            if not res2.success:
+                return res2
+            return Result(True, res1.result + res2.result, res2.input)
         return Parser(parse_func)
 
     def __or__(self, parser2):
@@ -61,10 +72,20 @@ class Char(Parser):
             return Result(False, [error_msg], inp)
 
 
-Choice = lambda list_of_parsers: reduce(lambda x, y: x | y, list_of_parsers)
-Any = lambda list_of_chars: Choice(Char(x) for x in list_of_chars)
-Sequence = lambda list_of_parsers: reduce(lambda x, y: x + y, list_of_parsers)
-Seq = lambda list_of_chars: Sequence(Char(x) for x in list_of_chars)
+def Any(lst):
+    if all(isinstance(x, Parser) for x in lst):
+        return reduce(lambda x, y: x | y, lst)
+    if all(isinstance(x, str) for x in lst):
+        return reduce(lambda x, y: x | y, [Char(x) for x in lst])
+    return Parser(lambda inp: Result(False, ['type mismatch in Any()'], inp))
+
+
+def Seq(lst):
+    if all(isinstance(x, Parser) for x in lst):
+        return reduce(lambda x, y: x + y, lst)
+    if all(isinstance(x, str) for x in lst):
+        return reduce(lambda x, y: x & y, [Char(x) for x in lst])
+    return Parser(lambda inp: Result(False, ['type mismatch in Seq()'], inp))
 
 
 def ZeroOrMore(parser):
@@ -73,7 +94,7 @@ def ZeroOrMore(parser):
         if not res.success:
             return Result(True, [], inp)
         res2 = new_parser(res.input)
-        return Result(True, [res.result, res2.result], res2.input)
+        return Result(True, [res.result] + res2.result, res2.input)
     return Parser(new_parser)
 
 
@@ -103,7 +124,15 @@ class Ref(Parser):
 def Between(p1, p2, p3):
     def get_middle_result(r):
         if r.success:
-            # format: result=[[[p1], [p2]], [p3]]
-            return Result(True, r.result[0][1], r.input)
+            # format: result=[[[p1], p2], p3]
+            return Result(True, [r.result[0][1]], r.input)
         return r
     return (p1 + p2 + p3).apply(get_middle_result)
+
+
+def End():
+    def parse_func(inp):
+        if inp == '':
+            return Result(True, [], '')
+        return Result(False, [f'Expected EOF, got "{inp[0]}"'], '')
+    return Parser(parse_func)

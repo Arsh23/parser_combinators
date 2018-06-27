@@ -1,44 +1,36 @@
-from parser import Any, OneOrMore, Char, Ref, Result, Between
+from parser import Any, OneOrMore, Char, Ref, Result, Between, End
 from operator import add, sub, mul, truediv
 
 
-def flatten(lst):
-    if not isinstance(lst, list):
-        return [lst]
-    else:
-        return [x for inner in lst for x in flatten(inner)]
-
-
-def flatten_number(r):
+def convert_to_int(r):
     if r.success:
-        res = int(''.join(str(x) for x in flatten(r.result)))
-        return Result(True, res, r.input)
+        return Result(True, [int(''.join(x[0] for x in r.result))], r.input)
     return r
 
 
 def eval_exp(r):
     if r.success:
         operators = {'+': add, '-': sub, '*': mul, '/': truediv}
-        # format: result=[[1, ['+']], 2]
-        n1, n2, op = r.result[0][0], r.result[1], r.result[0][1][0]
-        return Result(True, operators[op](n1, n2), r.input)
+        # format: result=[[[1], '+'], 2]
+        n1, n2, op = r.result[0][0][0], r.result[1], r.result[0][1]
+        return Result(True, [operators[op](n1, n2)], r.input)
     return r
 
 
 def exp_parser():
-    number = OneOrMore(Any(range(10))).apply(flatten_number)
+    number = OneOrMore(Any('1234567890')).apply(convert_to_int)
 
-    parans_exp = Between(Char('('), Ref('exp'), Char(')'))
-    factor = parans_exp | number
+    paran_exp = Between(Char('('), Ref('exp'), Char(')'))
+    factor = paran_exp | number
 
-    mul_and_div = (factor + Any(['*', '/']) + Ref('term')).apply(eval_exp)
+    mul_and_div = (factor + Any('*/') + Ref('term')).apply(eval_exp)
     term = mul_and_div | factor
 
-    add_and_sub = (term + Any(['+', '-']) + Ref('exp')).apply(eval_exp)
+    add_and_sub = (term + Any('+-') + Ref('exp')).apply(eval_exp)
     exp = add_and_sub | term
 
     Ref.link('exp', exp).link('term', term)
-    return exp
+    return exp + End()
 
 
 def tree(lst, space=0):
