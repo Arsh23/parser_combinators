@@ -1,8 +1,9 @@
-from collections import namedtuple, Callable
+from collections import namedtuple
 from functools import reduce
 
 
 Result = namedtuple('Result', ['success', 'result', 'input'])
+Input = namedtuple('Input', ['text', 'row', 'col'])
 
 
 class Parser():
@@ -11,6 +12,8 @@ class Parser():
         self.parse = parse_func
 
     def __call__(self, inp):
+        if isinstance(inp, str):
+            inp = Input(inp, 1, 1)
         return self.parse(inp)
 
     def __add__(self, parser2):
@@ -51,10 +54,15 @@ class Parser():
         return self.apply(always_true)
 
     def apply(self, modify_fn):
-        if isinstance(modify_fn, Callable):
-            parse_fn = self.parse
-            return Parser(lambda inp: modify_fn(parse_fn(inp)))
-        return self
+        parse_fn = self.parse
+        return Parser(lambda inp: modify_fn(parse_fn(inp)))
+
+    def on_success(self, modify_fn):
+        def modify_on_true(r):
+            if r.success:
+                return Result(True, modify_fn(r.result), r.input)
+            return r
+        return self.apply(modify_on_true)
 
 
 class Char(Parser):
@@ -63,12 +71,17 @@ class Char(Parser):
         self.char = char
 
     def parse(self, inp):
-        if not isinstance(inp, str) or inp == "":
-            return Result(False, 'No string found to parse', '')
-        if inp[0] == str(self.char):
-            return Result(True, [self.char], inp[1:])
+        if not isinstance(inp.text, str) or inp.text == "":
+            return Result(False, 'No string found to parse', inp)
+        if inp.text[0] == str(self.char):
+            col = 0 if inp.text[0] == '\n' else inp.col + 1
+            row = inp.row + 1 if inp.text[0] == '\n' else inp.row
+            new_inp = Input(inp.text[1:], row, col)
+            return Result(True, [self.char], new_inp)
         else:
-            error_msg = f'Expected "{self.char}" but got "{inp[0]}"'
+            error_msg = (
+                f'Expected "{self.char}" but got "{inp.text[0]}"'
+                f' at row:{inp.row} col:{inp.col}')
             return Result(False, [error_msg], inp)
 
 
@@ -94,11 +107,11 @@ def ZeroOrMore(parser):
         if not res.success:
             return Result(True, [], inp)
         res2 = new_parser(res.input)
-        return Result(True, [res.result] + res2.result, res2.input)
+        return Result(True, res.result + res2.result, res2.input)
     return Parser(new_parser)
 
 
-OneOrMore = lambda parser: parser + ZeroOrMore(parser)
+OneOrMore = lambda parser: parser & ZeroOrMore(parser)
 
 
 class Ref(Parser):
@@ -109,9 +122,8 @@ class Ref(Parser):
         self.name = parser_name
 
     @classmethod
-    def link(cls, name, parser):
-        cls.linked_parsers[name] = parser.parse
-        return cls
+    def link(cls, mappings):
+        cls.linked_parsers.update(mappings)
 
     def parse(self, inp):
         if self.name in self.linked_parsers:
@@ -124,15 +136,18 @@ class Ref(Parser):
 def Between(p1, p2, p3):
     def get_middle_result(r):
         if r.success:
-            # format: result=[[[p1], p2], p3]
-            return Result(True, [r.result[0][1]], r.input)
+            # format: result=[[[p1...], p2...], p3...] -> [p2...]
+            return Result(True, r.result[0][1:], r.input)
         return r
     return (p1 + p2 + p3).apply(get_middle_result)
 
 
 def End():
     def parse_func(inp):
-        if inp == '':
-            return Result(True, [], '')
-        return Result(False, [f'Expected EOF, got "{inp[0]}"'], '')
+        if inp.text == '':
+            return Result(True, [], inp)
+        error_msg = (
+            f'Expected end of string, got "{inp.text[0]}"'
+            f' at row:{inp.row} col:{inp.col}')
+        return Result(False, [error_msg], '')
     return Parser(parse_func)
