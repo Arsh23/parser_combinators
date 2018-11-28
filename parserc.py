@@ -115,7 +115,6 @@ OneOrMore = lambda parser: parser + ZeroOrMore(parser)
 
 
 class Ref(Parser):
-
     linked_parsers = {}
 
     def __init__(self, parser_name):
@@ -144,7 +143,7 @@ def Between(p1, p2, p3):
         res3 = p3(res2.input)
         if not res3.success:
             return res3
-        return res2
+        return Result(True, res2.result, res3.input)
     return Parser(new_parser)
 
 
@@ -157,3 +156,10 @@ def End():
             f' at row:{inp.row} col:{inp.col}')
         return Result(False, [error_msg], '')
     return Parser(parse_func)
+
+
+def StripWhitespace():
+    def remove_whitespace(inp):
+        new_inp = Input(''.join(inp.text.split()), inp.row, inp.col)
+        return Result(True, [], new_inp)
+    return Parser(remove_whitespace)
