@@ -44,7 +44,7 @@ def exp_parser():
 
     # exponent -> ( exp ) | NUMBER
     exponent = Between(Char('('), Ref('exp'), Char(')')) | number
-    # a reference to 'exp' parser is used cause its not defined yet
+    # a reference to 'exp' parser is used since its not defined yet
 
     # factor -> exponent factor'
     # factor' -> ^ exponent factor' | NULL
@@ -57,6 +57,8 @@ def exp_parser():
     # exp -> term exp'
     # exp' -> + term exp' | - term exp' | NULL
     exp = (term + ZeroOrMore(Any('+-') + term)).map(eval_exp)
+
+    # linking reference to actual parser
     Ref.link({'exp': exp})
 
     return StripWhitespace() + exp + End()
