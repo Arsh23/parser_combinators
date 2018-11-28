@@ -25,15 +25,14 @@ class Parser():
             if not res2.success:
                 return res2
 
+            r1 = res1.result
             if len(res1.result) == 1 and not isinstance(res1.result[0], list):
                 r1 = [res1.result]
-            else:
-                r1 = res1.result
 
+            r2 = res2.result
             if len(res2.result) == 1 and not isinstance(res2.result[0], list):
                 r2 = [res2.result]
-            else:
-                r2 = res2.result
+
             return Result(True, r1 + r2, res2.input)
         return Parser(parse_func)
 
@@ -72,7 +71,7 @@ class Char(Parser):
 
     def parse(self, inp):
         if not isinstance(inp.text, str) or inp.text == "":
-            return Result(False, 'No string found to parse', inp)
+            return Result(False, ['No string found to parse'], inp)
         if inp.text[0] == str(self.char):
             col = 0 if inp.text[0] == '\n' else inp.col + 1
             row = inp.row + 1 if inp.text[0] == '\n' else inp.row
@@ -111,7 +110,8 @@ def ZeroOrMore(parser):
     return Parser(new_parser)
 
 
-OneOrMore = lambda parser: parser + ZeroOrMore(parser)
+def OneOrMore(parser):
+    return parser + ZeroOrMore(parser)
 
 
 class Ref(Parser):

@@ -1,5 +1,7 @@
 import unittest
-from parserc import Char, Any, Seq, ZeroOrMore, OneOrMore, Between
+from parserc import (
+    Char, Any, Seq, ZeroOrMore, OneOrMore, Between, End, Ref, StripWhitespace
+)
 
 
 class TestParser(unittest.TestCase):
@@ -88,13 +90,33 @@ class TestParser(unittest.TestCase):
         self.assertEqual(parser('1').result, [['1']])
         self.assertEqual(parser('1234').result, [['1'], ['2'], ['3'], ['4']])
 
-    # -------
     def test_between(self):
         parser = Between(Char('A'), Char('B'), Char('C'))
         self.assertEqual(parser('ABC').result, ['B'])
 
         parser = Between(Char('A'), (Char('B') + Char('C')), Char('D'))
         self.assertEqual(parser('ABCD').result, [['B'], ['C']])
+
+    # -------
+    def test_map(self):
+        to_str = lambda result: ''.join(x[0] for x in result)
+        parser = Seq('ABC').map(to_str)
+        self.assertEqual(parser('ABCD').result, ['ABC'])
+
+    def test_end(self):
+        parser = Char('A') + End()
+        self.assertEqual(parser('A').result, [['A']])
+        self.assertEqual(parser('ABCD').success, False)
+
+    def test_ref(self):
+        parser = Ref('A_and_B') + Char('C')
+        A_and_B = Char('A') + Char('B')
+        Ref.link({'A_and_B': A_and_B})
+        self.assertEqual(parser('ABC').result, [['A'], ['B'], ['C']])
+
+    def test_StripWhitespace(self):
+        parser = StripWhitespace() + Seq('ABC')
+        self.assertEqual(parser(' A \n\tB   C').result, [['A'], ['B'], ['C']])
 
 
 if __name__ == '__main__':
