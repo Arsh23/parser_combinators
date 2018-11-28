@@ -24,18 +24,17 @@ class Parser():
             res2 = parser2(res1.input)
             if not res2.success:
                 return res2
-            return Result(True, [res1.result] + res2.result, res2.input)
-        return Parser(parse_func)
 
-    def __and__(self, parser2):
-        def parse_func(inp):
-            res1 = self(inp)
-            if not res1.success:
-                return res1
-            res2 = parser2(res1.input)
-            if not res2.success:
-                return res2
-            return Result(True, res1.result + res2.result, res2.input)
+            if len(res1.result) == 1 and not isinstance(res1.result[0], list):
+                r1 = [res1.result]
+            else:
+                r1 = res1.result
+
+            if len(res2.result) == 1 and not isinstance(res2.result[0], list):
+                r2 = [res2.result]
+            else:
+                r2 = res2.result
+            return Result(True, r1 + r2, res2.input)
         return Parser(parse_func)
 
     def __or__(self, parser2):
@@ -51,18 +50,19 @@ class Parser():
             if not res.success:
                 return Result(True, [], res.input)
             return res
-        return self.apply(always_true)
+        return self._apply(always_true)
 
-    def apply(self, modify_fn):
+    def _apply(self, modify_fn):
         parse_fn = self.parse
         return Parser(lambda inp: modify_fn(parse_fn(inp)))
 
-    def on_success(self, modify_fn):
+    def map(self, mod_fn):
         def modify_on_true(r):
             if r.success:
-                return Result(True, modify_fn(r.result), r.input)
+                rs = [mod_fn(r.result)] if mod_fn(r.result) is not None else []
+                return Result(True, rs, r.input)
             return r
-        return self.apply(modify_on_true)
+        return self._apply(modify_on_true)
 
 
 class Char(Parser):
@@ -97,7 +97,7 @@ def Seq(lst):
     if all(isinstance(x, Parser) for x in lst):
         return reduce(lambda x, y: x + y, lst)
     if all(isinstance(x, str) for x in lst):
-        return reduce(lambda x, y: x & y, [Char(x) for x in lst])
+        return reduce(lambda x, y: x + y, [Char(x) for x in lst])
     return Parser(lambda inp: Result(False, ['type mismatch in Seq()'], inp))
 
 
@@ -107,11 +107,11 @@ def ZeroOrMore(parser):
         if not res.success:
             return Result(True, [], inp)
         res2 = new_parser(res.input)
-        return Result(True, res.result + res2.result, res2.input)
+        return Result(True, [res.result] + res2.result, res2.input)
     return Parser(new_parser)
 
 
-OneOrMore = lambda parser: parser & ZeroOrMore(parser)
+OneOrMore = lambda parser: parser + ZeroOrMore(parser)
 
 
 class Ref(Parser):
@@ -134,12 +134,18 @@ class Ref(Parser):
 
 
 def Between(p1, p2, p3):
-    def get_middle_result(r):
-        if r.success:
-            # format: result=[[[p1...], p2...], p3...] -> [p2...]
-            return Result(True, r.result[0][1:], r.input)
-        return r
-    return (p1 + p2 + p3).apply(get_middle_result)
+    def new_parser(inp):
+        res = p1(inp)
+        if not res.success:
+            return res
+        res2 = p2(res.input)
+        if not res2.success:
+            return res2
+        res3 = p3(res2.input)
+        if not res3.success:
+            return res3
+        return res2
+    return Parser(new_parser)
 
 
 def End():
